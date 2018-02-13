@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onebusaway.gtfs_realtime.trip_updates_producer_demo;
+package oeg.dia.fi.upm.es;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -32,6 +33,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.onebusaway.gtfs.services.GtfsDao;
 import org.onebusway.gtfs_realtime.exporter.GtfsRealtimeExporterModule;
 import org.onebusway.gtfs_realtime.exporter.GtfsRealtimeLibrary;
 import org.onebusway.gtfs_realtime.exporter.GtfsRealtimeMutableProvider;
@@ -48,6 +50,8 @@ import com.google.transit.realtime.GtfsRealtime.TripUpdate.StopTimeEvent;
 import com.google.transit.realtime.GtfsRealtime.TripUpdate.StopTimeUpdate;
 import com.google.transit.realtime.GtfsRealtime.VehicleDescriptor;
 import com.google.transit.realtime.GtfsRealtime.VehiclePosition;
+
+import static java.lang.Math.toIntExact;
 
 /**
  * This class produces GTFS-realtime trip updates and vehicle positions by
@@ -71,7 +75,11 @@ public class GtfsRealtimeProviderImpl {
 
   private GtfsRealtimeMutableProvider _gtfsRealtimeProvider;
 
-  private URL _url;
+  private GtfsDao gtfs;
+
+  private Tram2json tram2json;
+
+  private Integer count;
 
   /**
    * How often vehicle data will be downloaded, in seconds.
@@ -86,9 +94,7 @@ public class GtfsRealtimeProviderImpl {
   /**
    * @param url the URL for the SEPTA vehicle data API.
    */
-  public void setUrl(URL url) {
-    _url = url;
-  }
+
 
   /**
    * @param refreshInterval how often vehicle data will be downloaded, in
@@ -109,6 +115,7 @@ public class GtfsRealtimeProviderImpl {
     _executor = Executors.newSingleThreadScheduledExecutor();
     _executor.scheduleAtFixedRate(new VehiclesRefreshTask(), 0,
         _refreshInterval, TimeUnit.SECONDS);
+    tram2json = new Tram2json();
   }
 
   /**
@@ -134,27 +141,24 @@ public class GtfsRealtimeProviderImpl {
     /**
      * We download the vehicle details as an array of JSON objects.
      */
-    JSONArray vehicleArray = downloadVehicleDetails();
-
+    HashMap<String,ArrayList<StopTimeAux>> tripsArray = downloadVehicleDetails();
+    Integer entity_id=0;
     /**
      * The FeedMessage.Builder is what we will use to build up our GTFS-realtime
      * feeds. We create a feed for both trip updates and vehicle positions.
      */
     FeedMessage.Builder tripUpdates = GtfsRealtimeLibrary.createFeedMessageBuilder();
-    FeedMessage.Builder vehiclePositions = GtfsRealtimeLibrary.createFeedMessageBuilder();
 
     /**
      * We iterate over every JSON vehicle object.
      */
-    for (int i = 0; i < vehicleArray.length(); ++i) {
 
-      JSONObject obj = vehicleArray.getJSONObject(i);
-      String trainNumber = obj.getString("trainno");
-      String route = obj.getString("dest");
-      String stopId = obj.getString("nextstop");
-      double lat = obj.getDouble("lat");
-      double lon = obj.getDouble("lon");
-      int delay = obj.getInt("late");
+    Iterator it = tripsArray.entrySet().iterator();
+
+    while(it.hasNext()) {
+      Map.Entry pair = (Map.Entry) it.next();
+
+      String trip_id = (String)pair.getKey();
 
       /**
        * We construct a TripDescriptor and VehicleDescriptor, which will be used
@@ -164,10 +168,8 @@ public class GtfsRealtimeProviderImpl {
        * route id instead.
        */
       TripDescriptor.Builder tripDescriptor = TripDescriptor.newBuilder();
-      tripDescriptor.setRouteId(route);
+      tripDescriptor.setTripId(trip_id);
 
-      VehicleDescriptor.Builder vehicleDescriptor = VehicleDescriptor.newBuilder();
-      vehicleDescriptor.setId(trainNumber);
 
       /**
        * To construct our TripUpdate, we create a stop-time arrival event for
@@ -175,71 +177,63 @@ public class GtfsRealtimeProviderImpl {
        * the stop-time update to a TripUpdate builder, along with the trip and
        * vehicle descriptors.
        */
-      StopTimeEvent.Builder arrival = StopTimeEvent.newBuilder();
-      arrival.setDelay(delay * 60);
-
-      StopTimeUpdate.Builder stopTimeUpdate = StopTimeUpdate.newBuilder();
-      stopTimeUpdate.setArrival(arrival);
-      stopTimeUpdate.setStopId(stopId);
-
+      ArrayList<StopTimeAux> stopTimeAux = (ArrayList<StopTimeAux>) pair.getValue();
+      stopTimeAux.sort(Comparator.comparing(StopTimeAux::getStop_sequence));
       TripUpdate.Builder tripUpdate = TripUpdate.newBuilder();
-      tripUpdate.addStopTimeUpdate(stopTimeUpdate);
       tripUpdate.setTrip(tripDescriptor);
-      tripUpdate.setVehicle(vehicleDescriptor);
 
+      for(StopTimeAux aux : stopTimeAux) {
+        StopTimeEvent.Builder departure = StopTimeEvent.newBuilder();
+        departure.setTime(aux.getDepartureTime());
+        departure.setDelay(toIntExact(aux.getDelay()));
+
+        StopTimeEvent.Builder arrival = StopTimeEvent.newBuilder();
+        arrival.setTime(aux.getArrivalTime());
+        arrival.setDelay(toIntExact(aux.getDelay()));
+
+        StopTimeUpdate.Builder stopTimeUpdate = StopTimeUpdate.newBuilder();
+        stopTimeUpdate.setDeparture(departure);
+        stopTimeUpdate.setArrival(arrival);
+        stopTimeUpdate.setStopSequence(aux.getStop_sequence());
+        stopTimeUpdate.setStopId(aux.getStop_id());
+
+        tripUpdate.addStopTimeUpdate(stopTimeUpdate);
+      }
       /**
        * Create a new feed entity to wrap the trip update and add it to the
        * GTFS-realtime trip updates feed.
        */
       FeedEntity.Builder tripUpdateEntity = FeedEntity.newBuilder();
-      tripUpdateEntity.setId(trainNumber);
+      tripUpdateEntity.setId(entity_id.toString());
       tripUpdateEntity.setTripUpdate(tripUpdate);
       tripUpdates.addEntity(tripUpdateEntity);
+      entity_id++;
 
-      /**
-       * To construct our VehiclePosition, we create a position for the vehicle.
-       * We add the position to a VehiclePosition builder, along with the trip
-       * and vehicle descriptors.
-       */
-
-      Position.Builder position = Position.newBuilder();
-      position.setLatitude((float) lat);
-      position.setLongitude((float) lon);
-
-      VehiclePosition.Builder vehiclePosition = VehiclePosition.newBuilder();
-      vehiclePosition.setPosition(position);
-      vehiclePosition.setTrip(tripDescriptor);
-      vehiclePosition.setVehicle(vehicleDescriptor);
-
-      /**
-       * Create a new feed entity to wrap the vehicle position and add it to the
-       * GTFS-realtime vehicle positions feed.
-       */
-      FeedEntity.Builder vehiclePositionEntity = FeedEntity.newBuilder();
-      vehiclePositionEntity.setId(trainNumber);
-      vehiclePositionEntity.setVehicle(vehiclePosition);
-      vehiclePositions.addEntity(vehiclePositionEntity);
     }
 
     /**
      * Build out the final GTFS-realtime feed messagse and save them.
      */
     _gtfsRealtimeProvider.setTripUpdates(tripUpdates.build());
-    _gtfsRealtimeProvider.setVehiclePositions(vehiclePositions.build());
 
-    _log.info("vehicles extracted: " + tripUpdates.getEntityCount());
+    _log.info("trips extracted: " + tripUpdates.getEntityCount());
   }
 
   /**
    * @return a JSON array parsed from the data pulled from the SEPTA vehicle
    *         data API.
    */
-  private JSONArray downloadVehicleDetails() throws IOException, JSONException {
-    BufferedReader reader = new BufferedReader(new InputStreamReader(
-        _url.openStream()));
-    JSONTokener tokener = new JSONTokener(reader);
-    JSONArray vehiclesArray = new JSONArray(tokener);
-    return vehiclesArray;
+  private HashMap<String, ArrayList<StopTimeAux>> downloadVehicleDetails() throws IOException, JSONException {
+    if(gtfs==null)
+      if(System.getenv("company").equals("tbs"))
+        gtfs = Gtfs2java.read("./datasets/tbs");
+      else
+        gtfs= Gtfs2java.read("./datasets/tbx");
+
+    JSONArray times = tram2json.recolectTimes();
+    Json2gtfsrl json2gtfsrl = new Json2gtfsrl(gtfs,tram2json.recolectTimes());
+
+    return json2gtfsrl.joinStaticAndRT();
   }
 
   /**
@@ -252,6 +246,13 @@ public class GtfsRealtimeProviderImpl {
     public void run() {
       try {
         _log.info("refreshing vehicles");
+        if(count==0){
+            tram2json.getKey();
+        }
+        else if(count>50){
+            count=0;
+          }
+        count++;
         refreshVehicles();
       } catch (Exception ex) {
         _log.warn("Error in vehicle refresh task", ex);

@@ -4,3 +4,6 @@ pom.xml.releaseBackup
 .settings
 .project
 .classpath
+
+.idea/
+onebusaway-gtfs-realtime-trip-updates-producer-demo.iml

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onebusaway.gtfs_realtime.trip_updates_producer_demo;
+package oeg.dia.fi.upm.es;
 
 import java.io.File;
 import java.net.URL;
@@ -78,16 +78,14 @@ public class GtfsRealtimeTripUpdatesProducerDemoMain {
     Parser parser = new GnuParser();
     CommandLine cli = parser.parse(options, args);
 
-    Set<Module> modules = new HashSet<Module>();
+    Set<Module> modules = new HashSet<>();
     GtfsRealtimeTripUpdatesProducerDemoModule.addModuleAndDependencies(modules);
 
     Injector injector = Guice.createInjector(modules);
     injector.injectMembers(this);
 
-    _provider.setUrl(new URL("http://www3.septa.org/hackathon/TrainView/"));
-
     if (cli.hasOption(ARG_TRIP_UPDATES_URL)) {
-      URL url = new URL(cli.getOptionValue(ARG_TRIP_UPDATES_URL));
+      URL url = new URL("http://localhost:8080/realtime/barcelona/tram/"+System.getenv("company")+"/trip-updates");
       TripUpdatesServlet servlet = injector.getInstance(TripUpdatesServlet.class);
       servlet.setUrl(url);
     }
