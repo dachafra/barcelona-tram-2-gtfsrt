@@ -116,6 +116,7 @@ public class GtfsRealtimeProviderImpl {
     _executor.scheduleAtFixedRate(new VehiclesRefreshTask(), 0,
         _refreshInterval, TimeUnit.SECONDS);
     tram2json = new Tram2json();
+    count=0;
   }
 
   /**
@@ -224,16 +225,14 @@ public class GtfsRealtimeProviderImpl {
    *         data API.
    */
   private HashMap<String, ArrayList<StopTimeAux>> downloadVehicleDetails() throws IOException, JSONException {
-    if(gtfs==null)
-      if(System.getenv("company").equals("tbs"))
-        gtfs = Gtfs2java.read("./datasets/tbs");
-      else
-        gtfs= Gtfs2java.read("./datasets/tbx");
+      if(gtfs==null)
+          if(System.getenv("company").equals("tbs"))
+              gtfs = Gtfs2java.read("./datasets/tbs");
+          else
+              gtfs= Gtfs2java.read("./datasets/tbx");
 
-    JSONArray times = tram2json.recolectTimes();
-    Json2gtfsrl json2gtfsrl = new Json2gtfsrl(gtfs,tram2json.recolectTimes());
-
-    return json2gtfsrl.joinStaticAndRT();
+      Json2gtfsrl json2gtfsrl = new Json2gtfsrl(gtfs,tram2json.recolectTimes());
+      return json2gtfsrl.joinStaticAndRT();
   }
 
   /**
@@ -248,11 +247,13 @@ public class GtfsRealtimeProviderImpl {
         _log.info("refreshing vehicles");
         if(count==0){
             tram2json.getKey();
+            _log.info("Getting the key");
         }
-        else if(count>50){
+        else if(count>110){
             count=0;
           }
         count++;
+        _log.info("Calls with the same key: "+count);
         refreshVehicles();
       } catch (Exception ex) {
         _log.warn("Error in vehicle refresh task", ex);

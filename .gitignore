@@ -7,3 +7,6 @@ pom.xml.releaseBackup
 
 .idea/
 onebusaway-gtfs-realtime-trip-updates-producer-demo.iml
+.DS_Store
+
+
