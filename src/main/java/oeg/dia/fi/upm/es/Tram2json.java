@@ -5,46 +5,53 @@ import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 import org.json.JSONArray;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Tram2json{
 
-    private String key;
-    private JSONArray times;
 
-    public Tram2json (){
+    private static final Logger _log = LoggerFactory.getLogger(Gtfs2java.class);
 
-    }
-
-
-
-    public void getKey(){
-        this.key="";
+    public static String getKey(){
+        String key="";
         try {
             HttpResponse<JsonNode> jsonResponse = Unirest.post("https://tram-opendata.azurewebsites.net/connect/token")
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .field("grant_type", "client_credentials")
-                    .field("client_id", "------")
-                    .field("client_secret", "-------")
+                    .field("client_id", "")
+                    .field("client_secret", "")
                     .asJson();
-            this.key = jsonResponse.getBody().getObject().getString("access_token");
+            key = jsonResponse.getBody().getObject().getString("access_token");
         }catch (Exception e){
-            System.out.println("Error getting the key: "+e.getMessage());
+            _log.error("Error getting the key: "+e.getMessage());
         }
+        return key;
 
     }
 
-    public JSONArray recolectTimes(){
-        try {
-            HttpResponse<JsonNode> jsonResponse = Unirest.get("https://tram-opendata.azurewebsites.net/api/v1/stopTimes")
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .header("Authorization", "Bearer "+key)
-                    .asJson();
-            times = jsonResponse.getBody().getArray();
+    public static JSONArray recolectTimes(String key){
+        if(!key.equals("")) {
+            JSONArray times = new JSONArray();
+            try {
+                HttpResponse<JsonNode> jsonResponse = Unirest.get("https://tram-opendata.azurewebsites.net/api/v1/stopTimes")
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .header("Authorization", "Bearer " + key)
+                        .asJson();
+                if (jsonResponse.getBody().isArray())
+                    times = jsonResponse.getBody().getArray();
+                else {
+                    _log.error("Error: " + jsonResponse.getStatus());
+                }
 
-        }catch (Exception e){
-            System.out.println("Error getting the realtime: "+e.getMessage());
-            times= new JSONArray();
+            } catch (Exception e) {
+                _log.error("Error getting the realtime: " + e.getMessage());
+            }
+            return times;
         }
-        return times;
+        else{
+            _log.error("Key is empty");
+            return new JSONArray();
+        }
     }
 }

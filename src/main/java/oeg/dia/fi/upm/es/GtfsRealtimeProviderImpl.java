@@ -77,9 +77,7 @@ public class GtfsRealtimeProviderImpl {
 
   private GtfsDao gtfs;
 
-  private Tram2json tram2json;
-
-  private Integer count;
+  private String key;
 
   /**
    * How often vehicle data will be downloaded, in seconds.
@@ -115,8 +113,6 @@ public class GtfsRealtimeProviderImpl {
     _executor = Executors.newSingleThreadScheduledExecutor();
     _executor.scheduleAtFixedRate(new VehiclesRefreshTask(), 0,
         _refreshInterval, TimeUnit.SECONDS);
-    tram2json = new Tram2json();
-    count=0;
   }
 
   /**
@@ -225,13 +221,26 @@ public class GtfsRealtimeProviderImpl {
    *         data API.
    */
   private HashMap<String, ArrayList<StopTimeAux>> downloadVehicleDetails() throws IOException, JSONException {
+      Integer calls =0;
       if(gtfs==null)
-          if(System.getenv("company").equals("tbs"))
+         if(System.getenv("company").equals("tbs"))
               gtfs = Gtfs2java.read("./datasets/tbs");
           else
-              gtfs= Gtfs2java.read("./datasets/tbx");
+              gtfs = Gtfs2java.read("./datasets/tbx");
 
-      Json2gtfsrl json2gtfsrl = new Json2gtfsrl(gtfs,tram2json.recolectTimes());
+      if(key==null || key.isEmpty()){
+        key = Tram2json.getKey();
+      }
+      JSONArray times= Tram2json.recolectTimes(key);
+      while(times.length()==0){
+        key=Tram2json.getKey();
+        times= Tram2json.recolectTimes(key);
+        if(calls > 10){
+          this.stop();
+        }
+        calls++;
+      }
+      Json2gtfsrl json2gtfsrl = new Json2gtfsrl(gtfs,times);
       return json2gtfsrl.joinStaticAndRT();
   }
 
@@ -245,15 +254,6 @@ public class GtfsRealtimeProviderImpl {
     public void run() {
       try {
         _log.info("refreshing vehicles");
-        if(count==0){
-            tram2json.getKey();
-            _log.info("Getting the key");
-        }
-        else if(count>110){
-            count=0;
-          }
-        count++;
-        _log.info("Calls with the same key: "+count);
         refreshVehicles();
       } catch (Exception ex) {
         _log.warn("Error in vehicle refresh task", ex);

@@ -21,12 +21,11 @@ import org.onebusaway.guice.jsr250.JSR250Module;
 import org.onebusway.gtfs_realtime.exporter.GtfsRealtimeExporterModule;
 
 import com.google.inject.AbstractModule;
-import com.google.inject.Module;
 
-public class GtfsRealtimeTripUpdatesProducerDemoModule extends AbstractModule {
+public class Module extends AbstractModule {
 
-  public static void addModuleAndDependencies(Set<Module> modules) {
-    modules.add(new GtfsRealtimeTripUpdatesProducerDemoModule());
+  public static void addModuleAndDependencies(Set<com.google.inject.Module> modules) {
+    modules.add(new Module());
     GtfsRealtimeExporterModule.addModuleAndDependencies(modules);
     JSR250Module.addModuleAndDependencies(modules);
   }

@@ -35,9 +35,8 @@ import org.onebusway.gtfs_realtime.exporter.VehiclePositionsServlet;
 
 import com.google.inject.Guice;
 import com.google.inject.Injector;
-import com.google.inject.Module;
 
-public class GtfsRealtimeTripUpdatesProducerDemoMain {
+public class Main {
 
   private static final String ARG_TRIP_UPDATES_PATH = "tripUpdatesPath";
 
@@ -48,7 +47,7 @@ public class GtfsRealtimeTripUpdatesProducerDemoMain {
   private static final String ARG_VEHICLE_POSITIONS_URL = "vehiclePositionsUrl";
 
   public static void main(String[] args) throws Exception {
-    GtfsRealtimeTripUpdatesProducerDemoMain m = new GtfsRealtimeTripUpdatesProducerDemoMain();
+    Main m = new Main();
     m.run(args);
   }
 
@@ -78,8 +77,8 @@ public class GtfsRealtimeTripUpdatesProducerDemoMain {
     Parser parser = new GnuParser();
     CommandLine cli = parser.parse(options, args);
 
-    Set<Module> modules = new HashSet<>();
-    GtfsRealtimeTripUpdatesProducerDemoModule.addModuleAndDependencies(modules);
+    Set<com.google.inject.Module> modules = new HashSet<>();
+    Module.addModuleAndDependencies(modules);
 
     Injector injector = Guice.createInjector(modules);
     injector.injectMembers(this);
