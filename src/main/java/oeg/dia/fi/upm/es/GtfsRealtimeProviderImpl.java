@@ -79,6 +79,8 @@ public class GtfsRealtimeProviderImpl {
 
   private String key;
 
+  private Json2gtfsrl json2gtfsrl;
+
   /**
    * How often vehicle data will be downloaded, in seconds.
    */
@@ -110,9 +112,24 @@ public class GtfsRealtimeProviderImpl {
   @PostConstruct
   public void start() {
     _log.info("starting GTFS-realtime service");
+   this.initSystems();
     _executor = Executors.newSingleThreadScheduledExecutor();
     _executor.scheduleAtFixedRate(new VehiclesRefreshTask(), 0,
         _refreshInterval, TimeUnit.SECONDS);
+  }
+
+  public void initSystems(){
+    try {
+      if (gtfs == null)
+        if(System.getenv("company").equals("tbs"))
+          gtfs = Gtfs2java.read("./datasets/tbs");
+        else
+          gtfs = Gtfs2java.read("./datasets/tbx");
+    }catch (IOException e){
+      System.out.printf("There are not GTFS in the provided path");
+    }
+    json2gtfsrl = new Json2gtfsrl(gtfs);
+    key = Tram2json.getKey();
   }
 
   /**
@@ -220,28 +237,20 @@ public class GtfsRealtimeProviderImpl {
    * @return a JSON array parsed from the data pulled from the SEPTA vehicle
    *         data API.
    */
-  private HashMap<String, ArrayList<StopTimeAux>> downloadVehicleDetails() throws IOException, JSONException {
-      Integer calls =0;
-      if(gtfs==null)
-         if(System.getenv("company").equals("tbs"))
-              gtfs = Gtfs2java.read("./datasets/tbs");
-          else
-              gtfs = Gtfs2java.read("./datasets/tbx");
-
-      if(key==null || key.isEmpty()){
-        key = Tram2json.getKey();
-      }
-      JSONArray times= Tram2json.recolectTimes(key);
+  private HashMap<String, ArrayList<StopTimeAux>> downloadVehicleDetails() {
+      JSONArray times = Tram2json.recolectTimes(key);
       while(times.length()==0){
-        key=Tram2json.getKey();
-        times= Tram2json.recolectTimes(key);
-        if(calls > 10){
-          this.stop();
+        String auxkey=Tram2json.getKey();
+        if(key.equals(auxkey)){
+          _log.info("Length 0, same keys");
         }
-        calls++;
+        else {
+          _log.info("Changing the key for get requests");
+          key = auxkey;
+        }
+        times = Tram2json.recolectTimes(key);
       }
-      Json2gtfsrl json2gtfsrl = new Json2gtfsrl(gtfs,times);
-      return json2gtfsrl.joinStaticAndRT();
+      return json2gtfsrl.joinStaticAndRT(times);
   }
 
   /**

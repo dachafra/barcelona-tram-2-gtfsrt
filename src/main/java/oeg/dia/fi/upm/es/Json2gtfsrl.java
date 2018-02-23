@@ -22,18 +22,16 @@ public class Json2gtfsrl{
     private ZoneId zoneId= ZoneId.of("Europe/Madrid");
     private LocalDateTime todayMidnight = LocalDateTime.of(LocalDate.now(zoneId), LocalTime.MIDNIGHT);
     private GtfsDao gtfs;
-    private JSONArray times;
     private HashMap<String,ArrayList<StopTimeAux>> delays;
     private boolean date;
 
 
-    public Json2gtfsrl(GtfsDao gtfs, JSONArray times){
-        delays = new HashMap<>();
+    public Json2gtfsrl(GtfsDao gtfs){
         this.gtfs = gtfs;
-        this.times = times;
     }
 
-    public HashMap<String,ArrayList<StopTimeAux>> joinStaticAndRT (){
+    public HashMap<String,ArrayList<StopTimeAux>> joinStaticAndRT (JSONArray times){
+        delays = new HashMap<>();
         JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
         long timeNow = System.currentTimeMillis();
         Collection<StopTime> stopTimes = gtfs.getAllStopTimes();
